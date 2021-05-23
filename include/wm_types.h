@@ -6,6 +6,8 @@
 #include <xcb/randr.h>
 #include <stdbool.h>
 
+#include "helpers.h"
+
 /* Number of workspaces. */
 #define WORKSPACES 10
 
@@ -51,9 +53,9 @@ typedef struct {
   char *name;
   int16_t x; /* X and Y. */
   int16_t y;
-  uint16_t width;    /* Width in pixels. */
-  uint16_t height;   /* Height in pixels. */
-  struct item *item; /* Pointer to our place in output list. */
+  uint16_t width;   /* Width in pixels. */
+  uint16_t height;  /* Height in pixels. */
+  LinkedNode *item; /* Pointer to our place in output list. */
 } Monitor;
 
 typedef struct {
@@ -76,13 +78,13 @@ typedef struct {
   uint16_t max_width, max_height;
   int32_t width_inc, height_inc;
   int32_t base_width, base_height;
-  bool vertmaxed;       /* Vertically maximized? */
-  bool maxed;           /* Totally maximized? */
-  bool fixed;           /* Visible on all workspaces? */
-  Monitor *monitor;     /* The physical output this window is on. */
-  struct item *winitem; /* Pointer to our place in global windows list. */
-  struct item *wsitem[WORKSPACES]; /* Pointer to our place in every
-                                    * workspace window list. */
+  bool vertmaxed;      /* Vertically maximized? */
+  bool maxed;          /* Totally maximized? */
+  bool fixed;          /* Visible on all workspaces? */
+  Monitor *monitor;    /* The physical output this window is on. */
+  LinkedNode *winitem; /* Pointer to our place in global windows list. */
+  LinkedNode *wsitem[WORKSPACES]; /* Pointer to our place in every
+                                   * workspace window list. */
 } Client;
 
 /* Window configuration data. */

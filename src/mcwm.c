@@ -93,27 +93,27 @@ t * mcwm, a small window manager for the X Window System using the X
 
 /* Globals */
 
-int sigcode;                 /* Signal code. Non-zero if we've been
-                              * interruped by a signal. */
-xcb_connection_t *conn;      /* Connection to X server. */
-xcb_screen_t *screen;        /* Our current screen.  */
-int randrbase;               /* Beginning of RANDR extension events. */
-uint32_t curws = 0;          /* Current workspace. */
-Client *focuswin;            /* Current focus window. */
-Client *lastfocuswin;        /* Last focused window. NOTE! Only
-                              * used to communicate between
-                              * start and end of tabbing
-                              * mode. */
-struct item *winlist = NULL; /* Global list of all client windows. */
-struct item *monlist = NULL; /* List of all physical monitor outputs. */
-int mode = 0;                /* Internal mode, such as move or resize */
+int sigcode;                /* Signal code. Non-zero if we've been
+                             * interruped by a signal. */
+xcb_connection_t *conn;     /* Connection to X server. */
+xcb_screen_t *screen;       /* Our current screen.  */
+int randrbase;              /* Beginning of RANDR extension events. */
+uint32_t curws = 0;         /* Current workspace. */
+Client *focuswin;           /* Current focus window. */
+Client *lastfocuswin;       /* Last focused window. NOTE! Only
+                             * used to communicate between
+                             * start and end of tabbing
+                             * mode. */
+LinkedNode *winlist = NULL; /* Global list of all client windows. */
+LinkedNode *monlist = NULL; /* List of all physical monitor outputs. */
+int mode = 0;               /* Internal mode, such as move or resize */
 
 /*
  * Workspace list: Every workspace has a list of all visible
  * windows.
  */
-struct item *wslist[WORKSPACES] = {NULL, NULL, NULL, NULL, NULL,
-                                   NULL, NULL, NULL, NULL, NULL};
+LinkedNode *wslist[WORKSPACES] = {NULL, NULL, NULL, NULL, NULL,
+                                  NULL, NULL, NULL, NULL, NULL};
 
 /* Shortcut key type and initializiation. */
 struct keys {
@@ -253,11 +253,11 @@ finishtabbing(void) {
   mode = 0;
 
   if (NULL != lastfocuswin) {
-    movetohead(&wslist[curws], lastfocuswin->wsitem[curws]);
+    list_move_head(&wslist[curws], lastfocuswin->wsitem[curws]);
     lastfocuswin = NULL;
   }
 
-  movetohead(&wslist[curws], focuswin->wsitem[curws]);
+  list_move_head(&wslist[curws], focuswin->wsitem[curws]);
 }
 
 /*
@@ -345,7 +345,7 @@ cleanup(int code) {
  */
 void
 arrangewindows(void) {
-  struct item *item;
+  LinkedNode *item;
   Client *client;
 
   /*
@@ -414,9 +414,9 @@ bad:
 /* Add a window, specified by client, to workspace ws. */
 void
 addtoworkspace(Client *client, uint32_t ws) {
-  struct item *item;
+  LinkedNode *item;
 
-  item = additem(&wslist[ws]);
+  item = list_add(&wslist[ws]);
   if (NULL == item) {
     PDEBUG("addtoworkspace: Out of memory.\n");
     return;
@@ -442,7 +442,7 @@ addtoworkspace(Client *client, uint32_t ws) {
 /* Delete window client from workspace ws. */
 void
 delfromworkspace(Client *client, uint32_t ws) {
-  delitem(&wslist[ws], client->wsitem[ws]);
+  list_del(&wslist[ws], client->wsitem[ws]);
 
   /* Reset our place in the workspace window list. */
   client->wsitem[ws] = NULL;
@@ -451,7 +451,7 @@ delfromworkspace(Client *client, uint32_t ws) {
 /* Change current workspace to ws. */
 void
 changeworkspace(uint32_t ws) {
-  struct item *item;
+  LinkedNode *item;
   Client *client;
 
   if (ws == curws) {
@@ -614,13 +614,13 @@ forgetclient(Client *client) {
   }
 
   /* Remove from global window list. */
-  freeitem(&winlist, NULL, client->winitem);
+  list_free(&winlist, NULL, client->winitem);
 }
 
 /* Forget everything about a client with client->id win. */
 void
 forgetwin(xcb_window_t win) {
-  struct item *item;
+  LinkedNode *item;
   Client *client;
   uint32_t ws;
 
@@ -656,7 +656,7 @@ forgetwin(xcb_window_t win) {
       }
 
       free(item->data);
-      delitem(&winlist, item);
+      list_del(&winlist, item);
 
       return;
     }
@@ -866,7 +866,7 @@ Client *
 setupwin(xcb_window_t win) {
   uint32_t mask = 0;
   uint32_t values[2];
-  struct item *item;
+  LinkedNode *item;
   Client *client;
   xcb_size_hints_t hints;
   uint32_t ws;
@@ -890,7 +890,7 @@ setupwin(xcb_window_t win) {
 
   /* Remember window and store a few things about it. */
 
-  item = additem(&winlist);
+  item = list_add(&winlist);
 
   if (NULL == item) {
     PDEBUG("newwin: Out of memory.\n");
@@ -1361,7 +1361,7 @@ getoutputs(xcb_randr_output_t *outputs, int len, xcb_timestamp_t timestamp) {
        * Check if it was used before. If it was, do something.
        */
       if ((mon = findmonitor(outputs[i]))) {
-        struct item *item;
+        LinkedNode *item;
         Client *client;
 
         /* Check all windows on this monitor and move them to
@@ -1399,7 +1399,7 @@ getoutputs(xcb_randr_output_t *outputs, int len, xcb_timestamp_t timestamp) {
 
 void
 arrbymon(Monitor *monitor) {
-  struct item *item;
+  LinkedNode *item;
   Client *client;
 
   PDEBUG("arrbymon\n");
@@ -1420,7 +1420,7 @@ arrbymon(Monitor *monitor) {
 
 Monitor *
 findmonitor(xcb_randr_output_t id) {
-  struct item *item;
+  LinkedNode *item;
   Monitor *mon;
 
   for (item = monlist; item != NULL; item = item->next) {
@@ -1438,7 +1438,7 @@ findmonitor(xcb_randr_output_t id) {
 Monitor *
 findclones(xcb_randr_output_t id, int16_t x, int16_t y) {
   Monitor *clonemon;
-  struct item *item;
+  LinkedNode *item;
 
   for (item = monlist; item != NULL; item = item->next) {
     clonemon = item->data;
@@ -1458,7 +1458,7 @@ findclones(xcb_randr_output_t id, int16_t x, int16_t y) {
 
 Monitor *
 findmonbycoord(int16_t x, int16_t y) {
-  struct item *item;
+  LinkedNode *item;
   Monitor *mon;
 
   for (item = monlist; item != NULL; item = item->next) {
@@ -1484,16 +1484,16 @@ void
 delmonitor(Monitor *mon) {
   PDEBUG("Deleting output %s.\n", mon->name);
   free(mon->name);
-  freeitem(&monlist, NULL, mon->item);
+  list_free(&monlist, NULL, mon->item);
 }
 
 Monitor *
 addmonitor(xcb_randr_output_t id, char *name, uint32_t x, uint32_t y,
            uint16_t width, uint16_t height) {
-  struct item *item;
+  LinkedNode *item;
   Monitor *mon;
 
-  if (NULL == (item = additem(&monlist))) {
+  if (NULL == (item = list_add(&monlist))) {
     fprintf(stderr, "Out of memory.\n");
     return NULL;
   }
@@ -1650,7 +1650,7 @@ focusnext(bool reverse) {
          * We were at the head of list. Focusing on last
          * window in list unless we were already there.
          */
-        struct item *last = wslist[curws];
+        LinkedNode *last = wslist[curws];
         while (NULL != last->next)
           last = last->next;
         if (focuswin->wsitem[curws] != last->data) {
@@ -1722,7 +1722,7 @@ setunfocus(xcb_drawable_t win) {
  */
 Client *
 findclient(xcb_drawable_t win) {
-  struct item *item;
+  LinkedNode *item;
   Client *client;
 
   for (item = winlist; item != NULL; item = item->next) {
@@ -1991,7 +1991,7 @@ resizestep(Client *client, char direction) {
  */
 static void
 snapwindow(Client *client, int snap_mode) {
-  struct item *item;
+  LinkedNode *item;
   Client *win;
   int16_t mon_x;
   int16_t mon_y;
@@ -2615,7 +2615,7 @@ deletewin(void) {
 
 void
 prevscreen(void) {
-  struct item *item;
+  LinkedNode *item;
 
   if (NULL == focuswin || NULL == focuswin->monitor) {
     return;
@@ -2639,7 +2639,7 @@ prevscreen(void) {
 
 void
 nextscreen(void) {
-  struct item *item;
+  LinkedNode *item;
 
   if (NULL == focuswin || NULL == focuswin->monitor) {
     return;
@@ -3478,11 +3478,11 @@ events(void) {
                    * of the list.
                    */
                   if (NULL != focuswin) {
-                    movetohead(&wslist[curws], focuswin->wsitem[curws]);
+                    list_move_head(&wslist[curws], focuswin->wsitem[curws]);
                     lastfocuswin = NULL;
                   }
 
-                  movetohead(&wslist[curws], client->wsitem[curws]);
+                  list_move_head(&wslist[curws], client->wsitem[curws]);
                 }
 
                 setfocus(client);
@@ -3605,7 +3605,7 @@ events(void) {
       case XCB_UNMAP_NOTIFY:
         {
           xcb_unmap_notify_event_t *e = (xcb_unmap_notify_event_t *)ev;
-          struct item *item;
+          LinkedNode *item;
           Client *client;
 
           /*

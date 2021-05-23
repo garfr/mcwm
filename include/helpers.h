@@ -1,44 +1,44 @@
 #ifndef HELPERS_H
 #define HELPERS_H
 
-typedef struct item {
+typedef struct LinkedNode {
   void *data;
-  struct item *prev;
-  struct item *next;
+  struct LinkedNode *prev;
+  struct LinkedNode *next;
 } LinkedNode;
 
 /*
  * Move element in item to the head of list mainlist.
  */
-void movetohead(struct item **mainlist, struct item *item);
+void list_move_head(LinkedNode **mainlist, LinkedNode *item);
 
 /*
  * Create space for a new item and add it to the head of mainlist.
  *
  * Returns item or NULL if out of memory.
  */
-struct item *additem(struct item **mainlist);
+LinkedNode *list_add(LinkedNode **mainlist);
 
 /*
  * Delete item from list mainlist.
  */
-void delitem(struct item **mainlist, struct item *item);
+void list_del(LinkedNode **mainlist, LinkedNode *item);
 
 /*
  * Free any data in current item and then delete item. Optionally
  * update number of items in list if stored != NULL.
  */
-void freeitem(struct item **list, int *stored, struct item *item);
+void list_free(LinkedNode **list, int *stored, LinkedNode *item);
 
 /*
  * Delete all items in list. Optionally update number of items in list
  * if stored != NULL.
  */
-void delallitems(struct item **list, int *stored);
+void list_del_all(LinkedNode **list, int *stored);
 
 /*
  * Print all items in mainlist on stdout.
  */
-void listitems(struct item *mainlist);
+void list_print(LinkedNode *mainlist);
 
 #endif
