@@ -7,11 +7,11 @@
 #endif
 
 #ifdef DEBUG
-#define PDEBUG(Args...) \
-  do { fprintf(stderr, "mcwm: "); fprintf(stderr, ##Args); } while(0)
+#define PDEBUG(...) \
+  do { fprintf(stderr, "mcwm: "); fprintf(stderr, __VA_ARGS__); } while(0)
 #define D(x) x
 #else
-#define PDEBUG(Args...)
+#define PDEBUG(...)
 #define D(x)
 #endif
 
