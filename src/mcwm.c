@@ -1,5 +1,5 @@
 /*
- * mcwm, a small window manager for the X Window System using the X
+t * mcwm, a small window manager for the X Window System using the X
  * protocol C Binding libraries.
  *
  * For 'user' configurable stuff, see config.h.
@@ -49,7 +49,8 @@
 #include "events.h"
 #endif
 
-#include "list.h"
+#include "helpers.h"
+#include "wm_types.h"
 
 /* Check here for user configurable parts: */
 #include "config.h"
@@ -84,103 +85,11 @@
  */
 #define MCWM_TABBING 4
 
-/* Number of workspaces. */
-#define WORKSPACES 10
-
 /* Value in WM hint which means this window is fixed on all workspaces. */
 #define NET_WM_FIXED 0xffffffff
 
 /* This means we didn't get any window hint at all. */
 #define MCWM_NOWS 0xfffffffe
-
-/* Types. */
-
-/* All our key shortcuts. */
-typedef enum
-{
-  KEY_F,
-  KEY_H,
-  KEY_J,
-  KEY_K,
-  KEY_L,
-  KEY_M,
-  KEY_R,
-  KEY_RET,
-  KEY_X,
-  KEY_TAB,
-  KEY_BACKTAB,
-  KEY_1,
-  KEY_2,
-  KEY_3,
-  KEY_4,
-  KEY_5,
-  KEY_6,
-  KEY_7,
-  KEY_8,
-  KEY_9,
-  KEY_0,
-  KEY_Y,
-  KEY_U,
-  KEY_B,
-  KEY_N,
-  KEY_END,
-  KEY_PREVSCR,
-  KEY_NEXTSCR,
-  KEY_ICONIFY,
-  KEY_PREVWS,
-  KEY_NEXTWS,
-  KEY_MAX
-} key_enum_t;
-
-struct monitor {
-  xcb_randr_output_t id;
-  char *name;
-  int16_t x; /* X and Y. */
-  int16_t y;
-  uint16_t width;    /* Width in pixels. */
-  uint16_t height;   /* Height in pixels. */
-  struct item *item; /* Pointer to our place in output list. */
-};
-
-struct sizepos {
-  int16_t x;
-  int16_t y;
-  uint16_t width;
-  uint16_t height;
-};
-
-/* Everything we know about a window. */
-struct client {
-  xcb_drawable_t id;              /* ID of this window. */
-  bool usercoord;                 /* X,Y was set by -geom. */
-  int16_t x;                      /* X coordinate. */
-  int16_t y;                      /* Y coordinate. */
-  uint16_t width;                 /* Width in pixels. */
-  uint16_t height;                /* Height in pixels. */
-  struct sizepos origsize;        /* Original size if we're currently maxed. */
-  uint16_t min_width, min_height; /* Hints from application. */
-  uint16_t max_width, max_height;
-  int32_t width_inc, height_inc;
-  int32_t base_width, base_height;
-  bool vertmaxed;          /* Vertically maximized? */
-  bool maxed;              /* Totally maximized? */
-  bool fixed;              /* Visible on all workspaces? */
-  struct monitor *monitor; /* The physical output this window is on. */
-  struct item *winitem;    /* Pointer to our place in global windows list. */
-  struct item *wsitem[WORKSPACES]; /* Pointer to our place in every
-                                    * workspace window list. */
-};
-
-/* Window configuration data. */
-struct winconf {
-  int16_t x;
-  int16_t y;
-  uint16_t width;
-  uint16_t height;
-  uint8_t stackmode;
-  xcb_window_t sibling;
-  uint16_t borderwidth;
-};
 
 /* Globals */
 
@@ -190,8 +99,8 @@ xcb_connection_t *conn;      /* Connection to X server. */
 xcb_screen_t *screen;        /* Our current screen.  */
 int randrbase;               /* Beginning of RANDR extension events. */
 uint32_t curws = 0;          /* Current workspace. */
-struct client *focuswin;     /* Current focus window. */
-struct client *lastfocuswin; /* Last focused window. NOTE! Only
+Client *focuswin;            /* Current focus window. */
+Client *lastfocuswin;        /* Last focused window. NOTE! Only
                               * used to communicate between
                               * start and end of tabbing
                               * mode. */
@@ -260,16 +169,16 @@ static void cleanup(int code);
 static void arrangewindows(void);
 static void setwmdesktop(xcb_drawable_t win, uint32_t ws);
 static int32_t getwmdesktop(xcb_drawable_t win);
-static void addtoworkspace(struct client *client, uint32_t ws);
-static void delfromworkspace(struct client *client, uint32_t ws);
+static void addtoworkspace(Client *client, uint32_t ws);
+static void delfromworkspace(Client *client, uint32_t ws);
 static void changeworkspace(uint32_t ws);
-static void fixwindow(struct client *client, bool setcolour);
+static void fixwindow(Client *client, bool setcolour);
 static uint32_t getcolor(const char *colstr);
-static void forgetclient(struct client *client);
+static void forgetclient(Client *client);
 static void forgetwin(xcb_window_t win);
-static void fitonscreen(struct client *client);
+static void fitonscreen(Client *client);
 static void newwin(xcb_window_t win);
-static struct client *setupwin(xcb_window_t win);
+static Client *setupwin(xcb_window_t win);
 static xcb_keycode_t keysymtokeycode(xcb_keysym_t keysym,
                                      xcb_key_symbols_t *keysyms);
 static int setupkeys(void);
@@ -278,36 +187,36 @@ static int setuprandr(void);
 static void getrandr(void);
 static void getoutputs(xcb_randr_output_t *outputs, int len,
                        xcb_timestamp_t timestamp);
-void arrbymon(struct monitor *monitor);
-static struct monitor *findmonitor(xcb_randr_output_t id);
-static struct monitor *findclones(xcb_randr_output_t id, int16_t x, int16_t y);
-static struct monitor *findmonbycoord(int16_t x, int16_t y);
-static void delmonitor(struct monitor *mon);
-static struct monitor *addmonitor(xcb_randr_output_t id, char *name, uint32_t x,
-                                  uint32_t y, uint16_t width, uint16_t height);
+void arrbymon(Monitor *monitor);
+static Monitor *findmonitor(xcb_randr_output_t id);
+static Monitor *findclones(xcb_randr_output_t id, int16_t x, int16_t y);
+static Monitor *findmonbycoord(int16_t x, int16_t y);
+static void delmonitor(Monitor *mon);
+static Monitor *addmonitor(xcb_randr_output_t id, char *name, uint32_t x,
+                           uint32_t y, uint16_t width, uint16_t height);
 static void raisewindow(xcb_drawable_t win);
-static void raiseorlower(struct client *client);
-static void movelim(struct client *client);
+static void raiseorlower(Client *client);
+static void movelim(Client *client);
 static void movewindow(xcb_drawable_t win, uint16_t x, uint16_t y);
-static struct client *findclient(xcb_drawable_t win);
+static Client *findclient(xcb_drawable_t win);
 static void focusnext(bool reverse);
 static void setunfocus(xcb_drawable_t win);
-static void setfocus(struct client *client);
+static void setfocus(Client *client);
 static int start(char *program);
-static void resizelim(struct client *client);
+static void resizelim(Client *client);
 static void moveresize(xcb_drawable_t win, uint16_t x, uint16_t y,
                        uint16_t width, uint16_t height);
 static void resize(xcb_drawable_t win, uint16_t width, uint16_t height);
-static void resizestep(struct client *client, char direction);
-static void snapwindow(struct client *client, int snap_mode);
-static void mousemove(struct client *client, int rel_x, int rel_y);
-static void mouseresize(struct client *client, int rel_x, int rel_y);
-static void movestep(struct client *client, char direction);
-static void setborders(struct client *client, int width);
-static void unmax(struct client *client);
-static void maximize(struct client *client);
-static void maxvert(struct client *client);
-static void hide(struct client *client);
+static void resizestep(Client *client, char direction);
+static void snapwindow(Client *client, int snap_mode);
+static void mousemove(Client *client, int rel_x, int rel_y);
+static void mouseresize(Client *client, int rel_x, int rel_y);
+static void movestep(Client *client, char direction);
+static void setborders(Client *client, int width);
+static void unmax(Client *client);
+static void maximize(Client *client);
+static void maxvert(Client *client);
+static void hide(Client *client);
 static bool getpointer(xcb_drawable_t win, int16_t *x, int16_t *y);
 static bool getgeom(xcb_drawable_t win, int16_t *x, int16_t *y, uint16_t *width,
                     uint16_t *height);
@@ -319,7 +228,7 @@ static void deletewin(void);
 static void prevscreen(void);
 static void nextscreen(void);
 static void handle_keypress(xcb_key_press_event_t *ev);
-static void configwin(xcb_window_t win, uint16_t mask, struct winconf wc);
+static void configwin(xcb_window_t win, uint16_t mask, WinConf wc);
 static void configurerequest(xcb_configure_request_event_t *e);
 static void events(void);
 static void printhelp(void);
@@ -437,7 +346,7 @@ cleanup(int code) {
 void
 arrangewindows(void) {
   struct item *item;
-  struct client *client;
+  Client *client;
 
   /*
    * Go through all windows. If they don't fit on the new screen,
@@ -504,7 +413,7 @@ bad:
 
 /* Add a window, specified by client, to workspace ws. */
 void
-addtoworkspace(struct client *client, uint32_t ws) {
+addtoworkspace(Client *client, uint32_t ws) {
   struct item *item;
 
   item = additem(&wslist[ws]);
@@ -532,7 +441,7 @@ addtoworkspace(struct client *client, uint32_t ws) {
 
 /* Delete window client from workspace ws. */
 void
-delfromworkspace(struct client *client, uint32_t ws) {
+delfromworkspace(Client *client, uint32_t ws) {
   delitem(&wslist[ws], client->wsitem[ws]);
 
   /* Reset our place in the workspace window list. */
@@ -543,7 +452,7 @@ delfromworkspace(struct client *client, uint32_t ws) {
 void
 changeworkspace(uint32_t ws) {
   struct item *item;
-  struct client *client;
+  Client *client;
 
   if (ws == curws) {
     PDEBUG("Changing to same workspace!\n");
@@ -601,7 +510,7 @@ changeworkspace(uint32_t ws) {
  * set, also change back to ordinary focus colour when unfixing.
  */
 void
-fixwindow(struct client *client, bool setcolour) {
+fixwindow(Client *client, bool setcolour) {
   uint32_t values[1];
   uint32_t ws;
 
@@ -685,7 +594,7 @@ getcolor(const char *colstr) {
 
 /* Forget everything about client client. */
 void
-forgetclient(struct client *client) {
+forgetclient(Client *client) {
   uint32_t ws;
 
   if (NULL == client) {
@@ -712,7 +621,7 @@ forgetclient(struct client *client) {
 void
 forgetwin(xcb_window_t win) {
   struct item *item;
-  struct client *client;
+  Client *client;
   uint32_t ws;
 
   /* Find this window in the global window list. */
@@ -758,7 +667,7 @@ forgetwin(xcb_window_t win) {
  * Fit client on physical screen, moving and resizing as necessary.
  */
 void
-fitonscreen(struct client *client) {
+fitonscreen(Client *client) {
   int16_t mon_x;
   int16_t mon_y;
   uint16_t mon_width;
@@ -868,7 +777,7 @@ fitonscreen(struct client *client) {
  */
 void
 newwin(xcb_window_t win) {
-  struct client *client;
+  Client *client;
 
   if (NULL != findclient(win)) {
     /*
@@ -953,12 +862,12 @@ newwin(xcb_window_t win) {
 }
 
 /* Set border colour, width and event mask for window. */
-struct client *
+Client *
 setupwin(xcb_window_t win) {
   uint32_t mask = 0;
   uint32_t values[2];
   struct item *item;
-  struct client *client;
+  Client *client;
   xcb_size_hints_t hints;
   uint32_t ws;
 
@@ -988,7 +897,7 @@ setupwin(xcb_window_t win) {
     return NULL;
   }
 
-  client = malloc(sizeof(struct client));
+  client = malloc(sizeof(Client));
   if (NULL == client) {
     PDEBUG("newwin: Out of memory.\n");
     return NULL;
@@ -1187,7 +1096,7 @@ setupscreen(void) {
   int len;
   xcb_window_t *children;
   xcb_get_window_attributes_reply_t *attr;
-  struct client *client;
+  Client *client;
   uint32_t ws;
 
   /* Get all children. */
@@ -1366,8 +1275,8 @@ getoutputs(xcb_randr_output_t *outputs, int len, xcb_timestamp_t timestamp) {
   xcb_randr_get_crtc_info_cookie_t icookie;
   xcb_randr_get_crtc_info_reply_t *crtc = NULL;
   xcb_randr_get_output_info_reply_t *output;
-  struct monitor *mon;
-  struct monitor *clonemon;
+  Monitor *mon;
+  Monitor *clonemon;
   xcb_randr_get_output_info_cookie_t ocookie[len];
   int i;
 
@@ -1453,7 +1362,7 @@ getoutputs(xcb_randr_output_t *outputs, int len, xcb_timestamp_t timestamp) {
        */
       if ((mon = findmonitor(outputs[i]))) {
         struct item *item;
-        struct client *client;
+        Client *client;
 
         /* Check all windows on this monitor and move them to
          * the next or to the first monitor if there is no
@@ -1489,9 +1398,9 @@ getoutputs(xcb_randr_output_t *outputs, int len, xcb_timestamp_t timestamp) {
 }
 
 void
-arrbymon(struct monitor *monitor) {
+arrbymon(Monitor *monitor) {
   struct item *item;
-  struct client *client;
+  Client *client;
 
   PDEBUG("arrbymon\n");
   /*
@@ -1509,10 +1418,10 @@ arrbymon(struct monitor *monitor) {
   }
 }
 
-struct monitor *
+Monitor *
 findmonitor(xcb_randr_output_t id) {
   struct item *item;
-  struct monitor *mon;
+  Monitor *mon;
 
   for (item = monlist; item != NULL; item = item->next) {
     mon = item->data;
@@ -1526,9 +1435,9 @@ findmonitor(xcb_randr_output_t id) {
   return NULL;
 }
 
-struct monitor *
+Monitor *
 findclones(xcb_randr_output_t id, int16_t x, int16_t y) {
-  struct monitor *clonemon;
+  Monitor *clonemon;
   struct item *item;
 
   for (item = monlist; item != NULL; item = item->next) {
@@ -1547,10 +1456,10 @@ findclones(xcb_randr_output_t id, int16_t x, int16_t y) {
   return NULL;
 }
 
-struct monitor *
+Monitor *
 findmonbycoord(int16_t x, int16_t y) {
   struct item *item;
-  struct monitor *mon;
+  Monitor *mon;
 
   for (item = monlist; item != NULL; item = item->next) {
     mon = item->data;
@@ -1572,24 +1481,24 @@ findmonbycoord(int16_t x, int16_t y) {
 }
 
 void
-delmonitor(struct monitor *mon) {
+delmonitor(Monitor *mon) {
   PDEBUG("Deleting output %s.\n", mon->name);
   free(mon->name);
   freeitem(&monlist, NULL, mon->item);
 }
 
-struct monitor *
+Monitor *
 addmonitor(xcb_randr_output_t id, char *name, uint32_t x, uint32_t y,
            uint16_t width, uint16_t height) {
   struct item *item;
-  struct monitor *mon;
+  Monitor *mon;
 
   if (NULL == (item = additem(&monlist))) {
     fprintf(stderr, "Out of memory.\n");
     return NULL;
   }
 
-  mon = malloc(sizeof(struct monitor));
+  mon = malloc(sizeof(Monitor));
   if (NULL == mon) {
     fprintf(stderr, "Out of memory.\n");
     return NULL;
@@ -1626,7 +1535,7 @@ raisewindow(xcb_drawable_t win) {
  * where it is now.
  */
 void
-raiseorlower(struct client *client) {
+raiseorlower(Client *client) {
   uint32_t values[] = {XCB_STACK_MODE_OPPOSITE};
   xcb_drawable_t win;
 
@@ -1641,7 +1550,7 @@ raiseorlower(struct client *client) {
 }
 
 void
-movelim(struct client *client) {
+movelim(Client *client) {
   int16_t mon_x;
   int16_t mon_y;
   uint16_t mon_width;
@@ -1700,7 +1609,7 @@ movewindow(xcb_drawable_t win, uint16_t x, uint16_t y) {
 /* Change focus to next in window ring. */
 void
 focusnext(bool reverse) {
-  struct client *client = NULL;
+  Client *client = NULL;
 
 #if DEBUG
   if (NULL != focuswin) {
@@ -1811,10 +1720,10 @@ setunfocus(xcb_drawable_t win) {
  *
  * Returns client pointer or NULL if not found.
  */
-struct client *
+Client *
 findclient(xcb_drawable_t win) {
   struct item *item;
-  struct client *client;
+  Client *client;
 
   for (item = winlist; item != NULL; item = item->next) {
     client = item->data;
@@ -1829,7 +1738,7 @@ findclient(xcb_drawable_t win) {
 
 /* Set focus on window client. */
 void
-setfocus(struct client *client) {
+setfocus(Client *client) {
   uint32_t values[1];
 
   /*
@@ -1922,7 +1831,7 @@ start(char *program) {
 
 /* Resize with limit. */
 void
-resizelim(struct client *client) {
+resizelim(Client *client) {
   int16_t mon_x;
   int16_t mon_y;
   uint16_t mon_width;
@@ -2016,7 +1925,7 @@ resize(xcb_drawable_t win, uint16_t width, uint16_t height) {
  * l = right, that is, increase width.
  */
 void
-resizestep(struct client *client, char direction) {
+resizestep(Client *client, char direction) {
   int step_x = MOVE_STEP;
   int step_y = MOVE_STEP;
 
@@ -2081,9 +1990,9 @@ resizestep(struct client *client, char direction) {
  * Try to snap to other windows and monitor border
  */
 static void
-snapwindow(struct client *client, int snap_mode) {
+snapwindow(Client *client, int snap_mode) {
   struct item *item;
-  struct client *win;
+  Client *win;
   int16_t mon_x;
   int16_t mon_y;
   uint16_t mon_width;
@@ -2189,7 +2098,7 @@ snapwindow(struct client *client, int snap_mode) {
  * rel_x,rel_y.
  */
 void
-mousemove(struct client *client, int rel_x, int rel_y) {
+mousemove(Client *client, int rel_x, int rel_y) {
   client->x = rel_x;
   client->y = rel_y;
 
@@ -2201,7 +2110,7 @@ mousemove(struct client *client, int rel_x, int rel_y) {
 }
 
 void
-mouseresize(struct client *client, int rel_x, int rel_y) {
+mouseresize(Client *client, int rel_x, int rel_y) {
   client->width = abs(rel_x - client->x);
   client->height = abs(rel_y - client->y);
 
@@ -2225,7 +2134,7 @@ mouseresize(struct client *client, int rel_x, int rel_y) {
 }
 
 void
-movestep(struct client *client, char direction) {
+movestep(Client *client, char direction) {
   int16_t start_x;
   int16_t start_y;
 
@@ -2282,7 +2191,7 @@ movestep(struct client *client, char direction) {
 }
 
 void
-setborders(struct client *client, int width) {
+setborders(Client *client, int width) {
   uint32_t values[1];
   uint32_t mask = 0;
 
@@ -2294,7 +2203,7 @@ setborders(struct client *client, int width) {
 }
 
 void
-unmax(struct client *client) {
+unmax(Client *client) {
   uint32_t values[5];
   uint32_t mask = 0;
 
@@ -2339,7 +2248,7 @@ unmax(struct client *client) {
 }
 
 void
-maximize(struct client *client) {
+maximize(Client *client) {
   uint32_t values[4];
   uint32_t mask = 0;
   int16_t mon_x;
@@ -2409,7 +2318,7 @@ maximize(struct client *client) {
 }
 
 void
-maxvert(struct client *client) {
+maxvert(Client *client) {
   uint32_t values[2];
   int16_t mon_y;
   uint16_t mon_height;
@@ -2466,7 +2375,7 @@ maxvert(struct client *client) {
 }
 
 void
-hide(struct client *client) {
+hide(Client *client) {
   long data[] = {XCB_ICCCM_WM_STATE_ICONIC, XCB_NONE};
 
   /*
@@ -2755,7 +2664,7 @@ nextscreen(void) {
 void
 handle_keypress(xcb_key_press_event_t *ev) {
   int i;
-  key_enum_t key;
+  KeyKind key;
 
   for (key = KEY_MAX, i = KEY_F; i < KEY_MAX; i++) {
     if (ev->detail == keys[i].keycode && 0 != keys[i].keycode) {
@@ -2949,7 +2858,7 @@ handle_keypress(xcb_key_press_event_t *ev) {
 
 /* Helper function to configure a window. */
 void
-configwin(xcb_window_t win, uint16_t mask, struct winconf wc) {
+configwin(xcb_window_t win, uint16_t mask, WinConf wc) {
   uint32_t values[7];
   int i = -1;
 
@@ -2997,8 +2906,8 @@ configwin(xcb_window_t win, uint16_t mask, struct winconf wc) {
 
 void
 configurerequest(xcb_configure_request_event_t *e) {
-  struct client *client;
-  struct winconf wc;
+  Client *client;
+  WinConf wc;
   int16_t mon_x;
   int16_t mon_y;
   uint16_t mon_width;
@@ -3524,7 +3433,7 @@ events(void) {
       case XCB_ENTER_NOTIFY:
         {
           xcb_enter_notify_event_t *e = (xcb_enter_notify_event_t *)ev;
-          struct client *client;
+          Client *client;
 
           PDEBUG("event: Enter notify eventwin %d, child %d, detail %d.\n",
                  e->event, e->child, e->detail);
@@ -3697,7 +3606,7 @@ events(void) {
         {
           xcb_unmap_notify_event_t *e = (xcb_unmap_notify_event_t *)ev;
           struct item *item;
-          struct client *client;
+          Client *client;
 
           /*
            * Find the window in our *current* workspace list, then

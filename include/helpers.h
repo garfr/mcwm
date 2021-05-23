@@ -1,11 +1,11 @@
-#ifndef LIST_H
-#define LIST_H
+#ifndef HELPERS_H
+#define HELPERS_H
 
-struct item {
+typedef struct item {
   void *data;
   struct item *prev;
   struct item *next;
-};
+} LinkedNode;
 
 /*
  * Move element in item to the head of list mainlist.

@@ -1,7 +1,7 @@
 project('mcwm', 'c')
 
 mcwm_src = [
-  'src/list.c',
+  'src/helpers.c',
   'src/mcwm.c'
 ]
 
