@@ -1,3 +1,6 @@
+#ifndef EVENTS_H
+#define EVENTS_H
+
 #define MAXEVENTS 34
 
 static char *evnames[] = {"",
@@ -35,3 +38,5 @@ static char *evnames[] = {"",
                           "ColormapNotify",
                           "ClientMessage",
                           "MappingNotify"};
+
+#endif

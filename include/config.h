@@ -1,3 +1,6 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
 /* User configurable stuff. */
 
 /*
@@ -99,3 +102,5 @@
 #define USERKEY_PREVSCREEN XK_comma
 #define USERKEY_NEXTSCREEN XK_period
 #define USERKEY_ICONIFY    XK_I
+
+#endif

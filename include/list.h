@@ -1,3 +1,6 @@
+#ifndef LIST_H
+#define LIST_H
+
 struct item {
   void *data;
   struct item *prev;
@@ -37,3 +40,5 @@ void delallitems(struct item **list, int *stored);
  * Print all items in mainlist on stdout.
  */
 void listitems(struct item *mainlist);
+
+#endif
