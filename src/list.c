@@ -7,8 +7,11 @@
 #endif
 
 #ifdef DEBUG
-#define PDEBUG(...) \
-  do { fprintf(stderr, "mcwm: "); fprintf(stderr, __VA_ARGS__); } while(0)
+#define PDEBUG(...)                                                            \
+  do {                                                                         \
+    fprintf(stderr, "mcwm: ");                                                 \
+    fprintf(stderr, __VA_ARGS__);                                              \
+  } while (0)
 #define D(x) x
 #else
 #define PDEBUG(...)
@@ -18,41 +21,37 @@
 /*
  * Move element in item to the head of list mainlist.
  */
-void movetohead(struct item **mainlist, struct item *item)
-{
-    if (NULL == item || NULL == mainlist || NULL == *mainlist)
-    {
-        return;
-    }
+void
+movetohead(struct item **mainlist, struct item *item) {
+  if (NULL == item || NULL == mainlist || NULL == *mainlist) {
+    return;
+  }
 
-    if (*mainlist == item)
-    {
-        /* item is NULL or we're already at head. Do nothing. */
-        return;
-    }
+  if (*mainlist == item) {
+    /* item is NULL or we're already at head. Do nothing. */
+    return;
+  }
 
-    /* Braid together the list where we are now. */
-    if (NULL != item->prev)
-    {
-        item->prev->next = item->next;
-    }
+  /* Braid together the list where we are now. */
+  if (NULL != item->prev) {
+    item->prev->next = item->next;
+  }
 
-    if (NULL != item->next)
-    {
-        item->next->prev = item->prev;
-    }
+  if (NULL != item->next) {
+    item->next->prev = item->prev;
+  }
 
-    /* Now we'at head, so no one before us. */
-    item->prev = NULL;
+  /* Now we'at head, so no one before us. */
+  item->prev = NULL;
 
-    /* Old head is our next. */
-    item->next = *mainlist;
+  /* Old head is our next. */
+  item->next = *mainlist;
 
-    /* Old head needs to know about us. */
-    item->next->prev = item;
+  /* Old head needs to know about us. */
+  item->next->prev = item;
 
-    /* Remember the new head. */
-    *mainlist = item;
+  /* Remember the new head. */
+  *mainlist = item;
 }
 
 /*
@@ -60,116 +59,100 @@ void movetohead(struct item **mainlist, struct item *item)
  *
  * Returns item or NULL if out of memory.
  */
-struct item *additem(struct item **mainlist)
-{
-    struct item *item;
+struct item *
+additem(struct item **mainlist) {
+  struct item *item;
 
-    if (NULL == (item = (struct item *) malloc(sizeof (struct item))))
-    {
-        return NULL;
-    }
+  if (NULL == (item = (struct item *)malloc(sizeof(struct item)))) {
+    return NULL;
+  }
 
-    if (NULL == *mainlist)
-    {
-        /* First in the list. */
+  if (NULL == *mainlist) {
+    /* First in the list. */
 
-        item->prev = NULL;
-        item->next = NULL;
-    }
-    else
-    {
-        /* Add to beginning of list. */
+    item->prev = NULL;
+    item->next = NULL;
+  } else {
+    /* Add to beginning of list. */
 
-        item->next = *mainlist;
-        item->next->prev = item;
-        item->prev = NULL;
-    }
+    item->next = *mainlist;
+    item->next->prev = item;
+    item->prev = NULL;
+  }
 
-    *mainlist = item;
+  *mainlist = item;
 
-    return item;
+  return item;
 }
 
-void delitem(struct item **mainlist, struct item *item)
-{
-    struct item *ml = *mainlist;
+void
+delitem(struct item **mainlist, struct item *item) {
+  struct item *ml = *mainlist;
 
-    if (NULL == mainlist || NULL == *mainlist || NULL == item)
-    {
-        return;
+  if (NULL == mainlist || NULL == *mainlist || NULL == item) {
+    return;
+  }
+
+  if (item == *mainlist) {
+    /* First entry was removed. Remember the next one instead. */
+    *mainlist = ml->next;
+  } else {
+    item->prev->next = item->next;
+
+    if (NULL != item->next) {
+      /* This is not the last item in the list. */
+      item->next->prev = item->prev;
     }
+  }
 
-    if (item == *mainlist)
-    {
-        /* First entry was removed. Remember the next one instead. */
-        *mainlist = ml->next;
-    }
-    else
-    {
-        item->prev->next = item->next;
-
-        if (NULL != item->next)
-        {
-            /* This is not the last item in the list. */
-            item->next->prev = item->prev;
-        }
-    }
-
-    free(item);
+  free(item);
 }
 
-void freeitem(struct item **list, int *stored,
-              struct item *item)
-{
-    if (NULL == list || NULL == *list || NULL == item)
-    {
-        return;
-    }
+void
+freeitem(struct item **list, int *stored, struct item *item) {
+  if (NULL == list || NULL == *list || NULL == item) {
+    return;
+  }
 
-    if (NULL != item->data)
-    {
-        free(item->data);
-        item->data = NULL;
-    }
+  if (NULL != item->data) {
+    free(item->data);
+    item->data = NULL;
+  }
 
-    delitem(list, item);
+  delitem(list, item);
 
-    if (NULL != stored)
-    {
-        (*stored) --;
-    }
+  if (NULL != stored) {
+    (*stored)--;
+  }
 }
 
 /*
  * Delete all elements in list and free memory resources.
  */
-void delallitems(struct item **list, int *stored)
-{
-    struct item *item;
-    struct item *next;
+void
+delallitems(struct item **list, int *stored) {
+  struct item *item;
+  struct item *next;
 
-    for (item = *list; item != NULL; item = next)
-    {
-        next = item->next;
-        free(item->data);
-        delitem(list, item);
-    }
+  for (item = *list; item != NULL; item = next) {
+    next = item->next;
+    free(item->data);
+    delitem(list, item);
+  }
 
-    if (NULL != stored)
-    {
-        (*stored) = 0;
-    }
+  if (NULL != stored) {
+    (*stored) = 0;
+  }
 }
 
-void listitems(struct item *mainlist)
-{
-    struct item *item;
-    int i;
+void
+listitems(struct item *mainlist) {
+  struct item *item;
+  int i;
 
-    for (item = mainlist, i = 1; item != NULL; item = item->next, i ++)
-    {
-        printf("item #%d (stored at %p).\n", i, (void *)item);
-    }
+  for (item = mainlist, i = 1; item != NULL; item = item->next, i++) {
+    printf("item #%d (stored at %p).\n", i, (void *)item);
+  }
 }
 
 #if 0

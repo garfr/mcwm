@@ -1,8 +1,7 @@
-struct item
-{
-    void *data;
-    struct item *prev;
-    struct item *next;
+struct item {
+  void *data;
+  struct item *prev;
+  struct item *next;
 };
 
 /*
@@ -26,8 +25,7 @@ void delitem(struct item **mainlist, struct item *item);
  * Free any data in current item and then delete item. Optionally
  * update number of items in list if stored != NULL.
  */
-void freeitem(struct item **list, int *stored,
-              struct item *item);
+void freeitem(struct item **list, int *stored, struct item *item);
 
 /*
  * Delete all items in list. Optionally update number of items in list
