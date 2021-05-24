@@ -34,6 +34,7 @@ t * mcwm, a small window manager for the X Window System using the X
 #include <stdlib.h>
 #include <string.h>
 #include <sys/select.h>
+#include <sys/poll.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -3060,31 +3061,27 @@ events(void) {
 
   int16_t mode_x = 0; /* X coord when in special mode */
   int16_t mode_y = 0; /* Y coord when in special mode */
-  int fd;             /* Our X file descriptor */
-  fd_set in;          /* For select */
-  int found;          /* Ditto. */
+  int x_fd;           /* Our X file descriptor */
+  struct pollfd fds[2];
 
   /* Get the file descriptor so we can do select() on it. */
-  fd = xcb_get_file_descriptor(conn);
+  x_fd = xcb_get_file_descriptor(conn);
+  fds[0].fd = x_fd;
+  fds[0].events = POLLIN;
 
   for (sigcode = 0; 0 == sigcode;) {
-    /* Prepare for select(). */
-    FD_ZERO(&in);
-    FD_SET(fd, &in);
-
     /*
-     * Check for events, again and again. When poll returns NULL
-     * (and it does that a lot), we block on select() until the
+     * Check for events, again and again. When xcb_poll_for_event returns NULL
+     * (and it does that a lot), we block on poll() until the
      * event file descriptor gets readable again.
      *
      * We do it this way instead of xcb_wait_for_event() since
-     * select() will return if we were interrupted by a signal. We
+     * poll() can poll for values using signal_fd. We
      * like that.
      */
     ev = xcb_poll_for_event(conn);
     if (NULL == ev) {
       PDEBUG("xcb_poll_for_event() returned NULL.\n");
-
       /*
        * Check if we have an unrecoverable connection error,
        * like a disconnected X server.
@@ -3094,17 +3091,12 @@ events(void) {
         exit(1);
       }
 
-      found = select(fd + 1, &in, NULL, NULL, NULL);
-      if (-1 == found) {
-        if (EINTR == errno) {
-          /* We received a signal. Break out of loop. */
-          break;
-        } else {
-          /* Something was seriously wrong with select(). */
-          fprintf(stderr, "mcwm: select failed.");
-          cleanup(0);
-          exit(1);
-        }
+      int found_poll = poll(fds, 1, -1);
+      if (-1 == found_poll) {
+        /* Something was seriously wrong with select(). */
+        fprintf(stderr, "mcwm: poll failed.");
+        cleanup(0);
+        exit(1);
       } else {
         /* We found more events. Goto start of loop. */
         continue;
