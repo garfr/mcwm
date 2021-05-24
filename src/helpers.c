@@ -2,21 +2,11 @@
 #include <stdio.h>
 #include "helpers.h"
 
-#ifdef DMALLOC
-#include "dmalloc.h"
-#endif
+#define TERMNRM "\x1B[0m"
+#define TERMRED "\x1B[31m"
+#define TERMBLU "\x1B[34m"
 
-#ifdef DEBUG
-#define PDEBUG(...)                                                            \
-  do {                                                                         \
-    fprintf(stderr, "mcwm: ");                                                 \
-    fprintf(stderr, __VA_ARGS__);                                              \
-  } while (0)
-#define D(x) x
-#else
-#define PDEBUG(...)
-#define D(x)
-#endif
+int verbose = 0;
 
 /*
  * Move element in item to the head of list mainlist.
@@ -153,4 +143,34 @@ list_print(LinkedNode *mainlist) {
   for (item = mainlist, i = 1; item != NULL; item = item->next, i++) {
     printf("item #%d (stored at %p).\n", i, (void *)item);
   }
+}
+
+void
+log_verbose(const char *fmt, ...) {
+  if (verbose) {
+    printf(TERMBLU "log: " TERMNRM);
+    va_list args;
+    va_start(args, fmt);
+    vprintf(fmt, args);
+    printf("\n");
+  }
+}
+
+void
+log_err(const char *fmt, ...) {
+  fprintf(stderr, TERMRED "error: " TERMNRM);
+  va_list args;
+  va_start(args, fmt);
+  vfprintf(stderr, fmt, args);
+  fprintf(stderr, "\n");
+}
+
+void
+log_err_final(const char *fmt, ...) {
+  fprintf(stderr, TERMRED "error: " TERMNRM);
+  va_list args;
+  va_start(args, fmt);
+  vfprintf(stderr, fmt, args);
+  fprintf(stderr, "\n");
+  exit(EXIT_FAILURE);
 }

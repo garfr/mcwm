@@ -46,31 +46,12 @@ t * mcwm, a small window manager for the X Window System using the X
 #include <xcb/xcb_util.h>
 #include <xcb/xproto.h>
 
-#ifdef DEBUG
 #include "events.h"
-#endif
-
 #include "helpers.h"
 #include "wm_types.h"
 
 /* Check here for user configurable parts: */
 #include "config.h"
-
-#ifdef DMALLOC
-#include "dmalloc.h"
-#endif
-
-#ifdef DEBUG
-#define PDEBUG(...)                                                            \
-  do {                                                                         \
-    fprintf(stderr, "mcwm: ");                                                 \
-    fprintf(stderr, __VAR_ARGS__);                                             \
-  } while (0)
-#define D(x) x
-#else
-#define PDEBUG(...)
-#define D(x)
-#endif
 
 /* Internal Constants. */
 
@@ -286,7 +267,7 @@ getmodkeys(xcb_mod_mask_t modmask) {
 
   if (NULL == (keycodes.keycodes = calloc(reply->keycodes_per_modifier,
                                           sizeof(xcb_keycode_t)))) {
-    PDEBUG("Out of memory.\n");
+    log_err_final("out of memory");
     return keycodes;
   }
 
@@ -316,7 +297,7 @@ getmodkeys(xcb_mod_mask_t modmask) {
         }
       }
 
-      PDEBUG("Got %d keycodes.\n", keycodes.len);
+      log_verbose("Got %d keycodes", keycodes.len);
     }
   }
 
@@ -362,7 +343,7 @@ arrangewindows(void) {
 /* Set the EWMH hint that window win belongs on workspace ws. */
 void
 setwmdesktop(xcb_drawable_t win, uint32_t ws) {
-  PDEBUG("Changing _NET_WM_DESKTOP on window %d to %d\n", win, ws);
+  log_verbose("Changing _NET_WM_DESKTOP on window %d to %d", win, ws);
 
   xcb_change_property(conn, XCB_PROP_MODE_REPLACE, win, atom_desktop,
                       XCB_ATOM_CARDINAL, 32, 1, &ws);
@@ -387,13 +368,13 @@ getwmdesktop(xcb_drawable_t win) {
 
   reply = xcb_get_property_reply(conn, cookie, NULL);
   if (NULL == reply) {
-    fprintf(stderr, "mcwm: Couldn't get properties for win %d\n", win);
+    log_err("couldn't get properties for win %d", win);
     return MCWM_NOWS;
   }
 
   /* Length is 0 if we didn't find it. */
   if (0 == xcb_get_property_value_length(reply)) {
-    PDEBUG("_NET_WM_DESKTOP reply was 0 length.\n");
+    log_verbose("_NET_WM_DESKTOP reply was 0 length");
     goto bad;
   }
 
@@ -401,7 +382,7 @@ getwmdesktop(xcb_drawable_t win) {
 
   ws = *wsp;
 
-  PDEBUG("got _NET_WM_DESKTOP: %d stored at %p.\n", ws, (void *)wsp);
+  log_verbose("got _NET_WM_DESKTOP: %d stored at %p", ws, (void *)wsp);
 
   free(reply);
 
@@ -419,7 +400,7 @@ addtoworkspace(Client *client, uint32_t ws) {
 
   item = list_add(&wslist[ws]);
   if (NULL == item) {
-    PDEBUG("addtoworkspace: Out of memory.\n");
+    log_err_final("out of memory");
     return;
   }
 
@@ -456,11 +437,11 @@ changeworkspace(uint32_t ws) {
   Client *client;
 
   if (ws == curws) {
-    PDEBUG("Changing to same workspace!\n");
+    log_verbose("changing to same workspace");
     return;
   }
 
-  PDEBUG("Changing from workspace #%d to #%d\n", curws, ws);
+  log_verbose("changing from workspace #%d to #%d", curws, ws);
 
   /*
    * We lose our focus if the window we focus isn't fixed. An
@@ -475,8 +456,8 @@ changeworkspace(uint32_t ws) {
   for (item = wslist[curws]; item != NULL; item = item->next) {
     client = item->data;
 
-    PDEBUG("changeworkspace. unmap phase. ws #%d, client-fixed: %d\n", curws,
-           client->fixed);
+    log_verbose("changeworkspace. unmap phase. ws #%d, client-fixed: %d", curws,
+                client->fixed);
 
     if (!client->fixed) {
       /*
@@ -492,8 +473,8 @@ changeworkspace(uint32_t ws) {
   for (item = wslist[ws]; item != NULL; item = item->next) {
     client = item->data;
 
-    PDEBUG("changeworkspace. map phase. ws #%d, client-fixed: %d\n", ws,
-           client->fixed);
+    log_verbose("changeworkspace. map phase. ws #%d, client-fixed: %d", ws,
+                client->fixed);
 
     /* Fixed windows are already mapped. Map everything else. */
     if (!client->fixed) {
@@ -581,13 +562,7 @@ getcolor(const char *colstr) {
   colcookie = xcb_alloc_named_color(conn, colormap, strlen(colstr), colstr);
   col_reply = xcb_alloc_named_color_reply(conn, colcookie, &error);
   if (NULL != error) {
-    fprintf(stderr,
-            "mcwm: Couldn't get pixel value for colour %s. "
-            "Exiting.\n",
-            colstr);
-
-    xcb_disconnect(conn);
-    exit(1);
+    log_err_final("couldn't get pixel value for colour %s", colstr);
   }
 
   return col_reply->pixel;
@@ -599,7 +574,7 @@ forgetclient(Client *client) {
   uint32_t ws;
 
   if (NULL == client) {
-    PDEBUG("forgetclient: client was NULL\n");
+    log_verbose("forgetclient: client was NULL");
     return;
   }
 
@@ -636,10 +611,10 @@ forgetwin(xcb_window_t win) {
      * UnmapNotify, so it isn't necessarily an error if we don't
      * find it.
      */
-    PDEBUG("Win %d == client ID %d\n", win, client->id);
+    log_verbose("win %d == client ID %d", win, client->id);
     if (win == client->id) {
       /* Found it. */
-      PDEBUG("Found it. Forgetting...\n");
+      log_verbose("found it");
 
       /*
        * Delete window from whatever workspace lists it belonged
@@ -647,11 +622,11 @@ forgetwin(xcb_window_t win) {
        * once.
        */
       for (ws = 0; ws < WORKSPACES; ws++) {
-        PDEBUG("Looking in ws #%d.\n", ws);
+        log_verbose("looking in workspace #%d", ws);
         if (NULL == client->wsitem[ws]) {
-          PDEBUG("  but it wasn't there.\n");
+          log_verbose("couldn't find workspace");
         } else {
-          PDEBUG("  found it here. Deleting!\n");
+          log_verbose("found in work space, delected");
           delfromworkspace(client, ws);
         }
       }
@@ -699,10 +674,6 @@ fitonscreen(Client *client) {
     mon_width = client->monitor->width;
     mon_height = client->monitor->height;
   }
-
-  PDEBUG("Is window outside monitor?\n");
-  PDEBUG("x: %d between %d and %d?\n", client->x, mon_x, mon_x + mon_width);
-  PDEBUG("y: %d between %d and %d?\n", client->y, mon_y, mon_y + mon_height);
 
   /* Is it outside the physical monitor? */
   if (client->x > mon_x + mon_width) {
@@ -762,12 +733,10 @@ fitonscreen(Client *client) {
   }
 
   if (willmove) {
-    PDEBUG("Moving to %d,%d.\n", client->x, client->y);
     movewindow(client->id, client->x, client->y);
   }
 
   if (willresize) {
-    PDEBUG("Resizing to %d x %d.\n", client->width, client->height);
     resize(client->id, client->width, client->height);
   }
 }
@@ -796,7 +765,7 @@ newwin(xcb_window_t win) {
    */
   client = setupwin(win);
   if (NULL == client) {
-    fprintf(stderr, "mcwm: Couldn't set up window. Out of memory.\n");
+    log_err_final("out of memory");
     return;
   }
 
@@ -810,12 +779,10 @@ newwin(xcb_window_t win) {
   if (!client->usercoord) {
     int16_t pointx;
     int16_t pointy;
-    PDEBUG("Coordinates not set by user. Using pointer: %d,%d.\n", pointx,
-           pointy);
 
     /* Get pointer position so we can move the window to the cursor. */
     if (!getpointer(screen->root, &pointx, &pointy)) {
-      PDEBUG("Failed to get pointer coords!\n");
+      log_verbose("failed to get pointer coords");
       pointx = 0;
       pointy = 0;
     }
@@ -825,7 +792,7 @@ newwin(xcb_window_t win) {
 
     movewindow(client->id, client->x, client->y);
   } else {
-    PDEBUG("User set coordinates.\n");
+    log_verbose("User set coordinates");
   }
 
   /* Find the physical output this window will be on if RANDR is active. */
@@ -894,13 +861,13 @@ setupwin(xcb_window_t win) {
   item = list_add(&winlist);
 
   if (NULL == item) {
-    PDEBUG("newwin: Out of memory.\n");
+    log_err_final("out of memory");
     return NULL;
   }
 
   client = malloc(sizeof(Client));
   if (NULL == client) {
-    PDEBUG("newwin: Out of memory.\n");
+    log_err_final("out of memory");
     return NULL;
   }
 
@@ -932,14 +899,14 @@ setupwin(xcb_window_t win) {
     client->wsitem[ws] = NULL;
   }
 
-  PDEBUG("Adding window %d\n", client->id);
+  log_verbose("adding window %d", client->id);
 
   setborders(client, conf.borderwidth);
 
   /* Get window geometry. */
   if (!getgeom(client->id, &client->x, &client->y, &client->width,
                &client->height)) {
-    fprintf(stderr, "Couldn't get geometry in initial setup of window.\n");
+    log_err_final("couldn't get geometry in initial setup of window");
   }
 
   /*
@@ -948,7 +915,7 @@ setupwin(xcb_window_t win) {
   if (!xcb_icccm_get_wm_normal_hints_reply(
           conn, xcb_icccm_get_wm_normal_hints_unchecked(conn, win), &hints,
           NULL)) {
-    PDEBUG("Couldn't get size hints.\n");
+    log_verbose("couldn't get size hints");
   }
 
   /*
@@ -973,8 +940,8 @@ setupwin(xcb_window_t win) {
     client->width_inc = hints.width_inc;
     client->height_inc = hints.height_inc;
 
-    PDEBUG("widht_inc %d\nheight_inc %d\n", client->width_inc,
-           client->height_inc);
+    log_verbose("widht_inc %d, height_inc %d", client->width_inc,
+                client->height_inc);
   }
 
   if (hints.flags & XCB_ICCCM_SIZE_HINT_BASE_SIZE) {
@@ -998,8 +965,7 @@ keysymtokeycode(xcb_keysym_t keysym, xcb_key_symbols_t *keysyms) {
   /* We only use the first keysymbol, even if there are more. */
   keyp = xcb_key_symbols_get_keycode(keysyms, keysym);
   if (NULL == keyp) {
-    fprintf(stderr, "mcwm: Couldn't look up key. Exiting.\n");
-    exit(1);
+    log_err_final("couldn't look up key");
     return 0;
   }
 
@@ -1032,8 +998,6 @@ setupkeys(void) {
   modkeys = getmodkeys(MODKEY);
 
   if (0 == modkeys.len) {
-    fprintf(stderr, "We couldn't find any keycodes to our main modifier "
-                    "key!\n");
     return -1;
   }
 
@@ -1115,7 +1079,6 @@ setupscreen(void) {
         conn, xcb_get_window_attributes(conn, children[i]), NULL);
 
     if (!attr) {
-      fprintf(stderr, "Couldn't get attributes for window %d.", children[i]);
       continue;
     }
 
@@ -1137,13 +1100,13 @@ setupscreen(void) {
          * RANDR is active.
          */
         if (-1 != randrbase) {
-          PDEBUG("Looking for monitor on %d x %d.\n", client->x, client->y);
+          log_verbose("looking for monitor on %d x %d", client->x, client->y);
           client->monitor = findmonbycoord(client->x, client->y);
 #if DEBUG
           if (NULL != client->monitor) {
-            PDEBUG("Found client on monitor %s.\n", client->monitor->name);
+            log_verbose("found client on monitor %s", client->monitor->name);
           } else {
-            PDEBUG("Couldn't find client on any monitor.\n");
+            log_verbose("couldn't find client on any monitor");
           }
 #endif
         }
@@ -1216,14 +1179,14 @@ setuprandr(void) {
 
   extension = xcb_get_extension_data(conn, &xcb_randr_id);
   if (!extension->present) {
-    PDEBUG("No RANDR extension.\n");
+    log_verbose("no RANDR extension");
     return -1;
   } else {
     getrandr();
   }
 
   base = extension->first_event;
-  PDEBUG("randrbase is %d.\n", base);
+  log_verbose("randrbase is %d", base);
 
   xcb_randr_select_input(conn, screen->root,
                          XCB_RANDR_NOTIFY_MASK_SCREEN_CHANGE |
@@ -1250,7 +1213,7 @@ getrandr(void) {
   rcookie = xcb_randr_get_screen_resources_current(conn, screen->root);
   res = xcb_randr_get_screen_resources_current_reply(conn, rcookie, NULL);
   if (NULL == res) {
-    printf("No RANDR extension available.\n");
+    log_verbose("no RANDR extension available");
     return;
   }
   timestamp = res->config_timestamp;
@@ -1258,7 +1221,7 @@ getrandr(void) {
   len = xcb_randr_get_screen_resources_current_outputs_length(res);
   outputs = xcb_randr_get_screen_resources_current_outputs(res);
 
-  PDEBUG("Found %d outputs.\n", len);
+  log_verbose("found %d outputs", len);
 
   /* Request information for all outputs. */
   getoutputs(outputs, len, timestamp);
@@ -1296,9 +1259,8 @@ getoutputs(xcb_randr_output_t *outputs, int len, xcb_timestamp_t timestamp) {
     asprintf(&name, "%.*s", xcb_randr_get_output_info_name_length(output),
              xcb_randr_get_output_info_name(output));
 
-    PDEBUG("Name: %s\n", name);
-    PDEBUG("id: %d\n", outputs[i]);
-    PDEBUG("Size: %d x %d mm.\n", output->mm_width, output->mm_height);
+    log_verbose("name: %s, id: %d, size: %d x %d mm", name, outputs[i],
+                output->mm_width, output->mm_height);
 
     if (XCB_NONE != output->crtc) {
       icookie = xcb_randr_get_crtc_info(conn, output->crtc, timestamp);
@@ -1307,20 +1269,20 @@ getoutputs(xcb_randr_output_t *outputs, int len, xcb_timestamp_t timestamp) {
         return;
       }
 
-      PDEBUG("CRTC: at %d, %d, size: %d x %d.\n", crtc->x, crtc->y, crtc->width,
-             crtc->height);
+      log_verbose("CRTC: at %d, %d, size: %d x %d", crtc->x, crtc->y,
+                  crtc->width, crtc->height);
 
       /* Check if it's a clone. */
       clonemon = findclones(outputs[i], crtc->x, crtc->y);
       if (NULL != clonemon) {
-        PDEBUG("Monitor %s, id %d is a clone of %s, id %d. Skipping.\n", name,
-               outputs[i], clonemon->name, clonemon->id);
+        log_verbose("monitor %s, id %d is a clone of %s, id %d, skipping", name,
+                    outputs[i], clonemon->name, clonemon->id);
         continue;
       }
 
       /* Do we know this monitor already? */
       if (NULL == (mon = findmonitor(outputs[i]))) {
-        PDEBUG("Monitor not known, adding to list.\n");
+        log_verbose("monitor not known, adding to list");
         addmonitor(outputs[i], name, crtc->x, crtc->y, crtc->width,
                    crtc->height);
       } else {
@@ -1330,7 +1292,7 @@ getoutputs(xcb_randr_output_t *outputs, int len, xcb_timestamp_t timestamp) {
          * We know this monitor. Update information. If it's
          * smaller than before, rearrange windows.
          */
-        PDEBUG("Known monitor. Updating info.\n");
+        log_verbose("known monitor, updating info");
 
         if (crtc->x != mon->x) {
           mon->x = crtc->x;
@@ -1357,7 +1319,7 @@ getoutputs(xcb_randr_output_t *outputs, int len, xcb_timestamp_t timestamp) {
 
       free(crtc);
     } else {
-      PDEBUG("Monitor not used at the moment.\n");
+      log_verbose("monitor not used at the moment");
       /*
        * Check if it was used before. If it was, do something.
        */
@@ -1403,7 +1365,6 @@ arrbymon(Monitor *monitor) {
   LinkedNode *item;
   Client *client;
 
-  PDEBUG("arrbymon\n");
   /*
    * Go through all windows on this monitor. If they don't fit on
    * the new screen, move them around and resize them as necessary.
@@ -1427,10 +1388,9 @@ findmonitor(xcb_randr_output_t id) {
   for (item = monlist; item != NULL; item = item->next) {
     mon = item->data;
     if (id == mon->id) {
-      PDEBUG("findmonitor: Found it. Output ID: %d\n", mon->id);
+      log_verbose("findmonitor: found it. output ID: %d", mon->id);
       return mon;
     }
-    PDEBUG("findmonitor: Goint to %p.\n", item->next);
   }
 
   return NULL;
@@ -1444,9 +1404,9 @@ findclones(xcb_randr_output_t id, int16_t x, int16_t y) {
   for (item = monlist; item != NULL; item = item->next) {
     clonemon = item->data;
 
-    PDEBUG("Monitor %s: x, y: %d--%d, %d--%d.\n", clonemon->name, clonemon->x,
-           clonemon->x + clonemon->width, clonemon->y,
-           clonemon->y + clonemon->height);
+    log_verbose("monitor %s: x, y: %d--%d, %d--%d", clonemon->name, clonemon->x,
+                clonemon->x + clonemon->width, clonemon->y,
+                clonemon->y + clonemon->height);
 
     /* Check for same position. */
     if (id != clonemon->id && clonemon->x == x && clonemon->y == y) {
@@ -1465,15 +1425,10 @@ findmonbycoord(int16_t x, int16_t y) {
   for (item = monlist; item != NULL; item = item->next) {
     mon = item->data;
 
-    PDEBUG("Monitor %s: x, y: %d--%d, %d--%d.\n", mon->name, mon->x,
-           mon->x + mon->width, mon->y, mon->y + mon->height);
-
-    PDEBUG("Is %d,%d between them?\n", x, y);
-
     if (x >= mon->x && x <= mon->x + mon->width && y >= mon->y &&
         y <= mon->y + mon->height) {
-      PDEBUG("findmonbycoord: Found it. Output ID: %d, name %s\n", mon->id,
-             mon->name);
+      log_verbose("findmonbycoord: found it. output ID: %d, name %s", mon->id,
+                  mon->name);
       return mon;
     }
   }
@@ -1483,7 +1438,7 @@ findmonbycoord(int16_t x, int16_t y) {
 
 void
 delmonitor(Monitor *mon) {
-  PDEBUG("Deleting output %s.\n", mon->name);
+  log_verbose("deleting output %s", mon->name);
   free(mon->name);
   list_free(&monlist, NULL, mon->item);
 }
@@ -1495,13 +1450,13 @@ addmonitor(xcb_randr_output_t id, char *name, uint32_t x, uint32_t y,
   Monitor *mon;
 
   if (NULL == (item = list_add(&monlist))) {
-    fprintf(stderr, "Out of memory.\n");
+    log_err_final("out of memory");
     return NULL;
   }
 
   mon = malloc(sizeof(Monitor));
   if (NULL == mon) {
-    fprintf(stderr, "Out of memory.\n");
+    log_err_final("out of memory");
     return NULL;
   }
 
@@ -1614,12 +1569,12 @@ focusnext(bool reverse) {
 
 #if DEBUG
   if (NULL != focuswin) {
-    PDEBUG("Focus now in win %d\n", focuswin->id);
+    log_verbose("focus now in win %d", focuswin->id);
   }
 #endif
 
   if (NULL == wslist[curws]) {
-    PDEBUG("No windows to focus on in this workspace.\n");
+    log_verbose("no windows to focus on in this workspace");
     return;
   }
 
@@ -1632,18 +1587,12 @@ focusnext(bool reverse) {
     lastfocuswin = focuswin;
     mode = MCWM_TABBING;
 
-    PDEBUG("Began tabbing.\n");
+    log_verbose("began tabbing");
   }
 
   /* If we currently have no focus focus first in list. */
   if (NULL == focuswin || NULL == focuswin->wsitem[curws]) {
-    PDEBUG("Focusing first in list: %p\n", wslist[curws]);
     client = wslist[curws]->data;
-
-    if (NULL != focuswin && NULL == focuswin->wsitem[curws]) {
-      PDEBUG("XXX Our focused window %d isn't on this workspace!\n",
-             focuswin->id);
-    }
   } else {
     if (reverse) {
       if (NULL == focuswin->wsitem[curws]->prev) {
@@ -1655,12 +1604,10 @@ focusnext(bool reverse) {
         while (NULL != last->next)
           last = last->next;
         if (focuswin->wsitem[curws] != last->data) {
-          PDEBUG("Beginning of list. Focusing last in list: %p\n", last);
           client = last->data;
         }
       } else {
         /* Otherwise, focus the next in list. */
-        PDEBUG("Tabbing. Focusing next: %p.\n", focuswin->wsitem[curws]->prev);
         client = focuswin->wsitem[curws]->prev->data;
       }
     } else {
@@ -1670,12 +1617,10 @@ focusnext(bool reverse) {
          * list unless we were already there.
          */
         if (focuswin->wsitem[curws] != wslist[curws]->data) {
-          PDEBUG("End of list. Focusing first in list: %p\n", wslist[curws]);
           client = wslist[curws]->data;
         }
       } else {
         /* Otherwise, focus the next in list. */
-        PDEBUG("Tabbing. Focusing next: %p.\n", focuswin->wsitem[curws]->next);
         client = focuswin->wsitem[curws]->next->data;
       }
     }
@@ -1729,7 +1674,6 @@ findclient(xcb_drawable_t win) {
   for (item = winlist; item != NULL; item = item->next) {
     client = item->data;
     if (win == client->id) {
-      PDEBUG("findclient: Found it. Win: %d\n", client->id);
       return client;
     }
   }
@@ -1750,7 +1694,6 @@ setfocus(Client *client) {
    * manager might be buggy.
    */
   if (NULL == client) {
-    PDEBUG("setfocus: client was NULL!\n");
 
     focuswin = NULL;
 
@@ -1880,8 +1823,6 @@ moveresize(xcb_drawable_t win, uint16_t x, uint16_t y, uint16_t width,
     return;
   }
 
-  PDEBUG("Moving to %d, %d, resizing to %d x %d.\n", x, y, width, height);
-
   values[0] = x;
   values[1] = y;
   values[2] = width;
@@ -1903,8 +1844,6 @@ resize(xcb_drawable_t win, uint16_t width, uint16_t height) {
     /* Can't resize root. */
     return;
   }
-
-  PDEBUG("Resizing to %d x %d.\n", width, height);
 
   values[0] = width;
   values[1] = height;
@@ -1971,7 +1910,6 @@ resizestep(Client *client, char direction) {
       break;
 
     default:
-      PDEBUG("resizestep in unknown direction.\n");
       break;
   } /* switch direction */
 
@@ -2118,9 +2056,10 @@ mouseresize(Client *client, int rel_x, int rel_y) {
   client->width -= (client->width - client->base_width) % client->width_inc;
   client->height -= (client->height - client->base_height) % client->height_inc;
 
-  PDEBUG("Trying to resize to %dx%d (%dx%d)\n", client->width, client->height,
-         (client->width - client->base_width) / client->width_inc,
-         (client->height - client->base_height) / client->height_inc);
+  log_verbose("Trying to resize to %dx%d (%dx%d)", client->width,
+              client->height,
+              (client->width - client->base_width) / client->width_inc,
+              (client->height - client->base_height) / client->height_inc);
 
   if (conf.snapmargin > 0) {
     snapwindow(client, MCWM_RESIZE);
@@ -2172,7 +2111,6 @@ movestep(Client *client, char direction) {
       break;
 
     default:
-      PDEBUG("movestep: Moving in unknown direction.\n");
       break;
   } /* switch direction */
 
@@ -2209,7 +2147,6 @@ unmax(Client *client) {
   uint32_t mask = 0;
 
   if (NULL == client) {
-    PDEBUG("unmax: client was NULL!\n");
     return;
   }
 
@@ -2258,7 +2195,6 @@ maximize(Client *client) {
   uint16_t mon_height;
 
   if (NULL == client) {
-    PDEBUG("maximize: client was NULL!\n");
     return;
   }
 
@@ -2325,7 +2261,6 @@ maxvert(Client *client) {
   uint16_t mon_height;
 
   if (NULL == client) {
-    PDEBUG("maxvert: client was NULL\n");
     return;
   }
 
@@ -2674,7 +2609,7 @@ handle_keypress(xcb_key_press_event_t *ev) {
     }
   }
   if (key == KEY_MAX) {
-    PDEBUG("Unknown key pressed.\n");
+    log_verbose("unknown key pressed");
 
     /*
      * We don't know what to do with this key. Send this key press
@@ -2914,7 +2849,7 @@ configurerequest(xcb_configure_request_event_t *e) {
   uint16_t mon_width;
   uint16_t mon_height;
 
-  PDEBUG("event: Configure request. mask = %d\n", e->value_mask);
+  log_verbose("event: configure request. mask = %d", e->value_mask);
 
   /* Find the client. */
   if ((client = findclient(e->window))) {
@@ -3030,7 +2965,6 @@ configurerequest(xcb_configure_request_event_t *e) {
        * on screen.
        */
       if (client->y < mon_y) {
-        PDEBUG("over the edge: y < %d\n", mon_y);
         client->y = mon_y;
         client->height = mon_height - 2 * conf.borderwidth;
       }
@@ -3038,7 +2972,6 @@ configurerequest(xcb_configure_request_event_t *e) {
 
     moveresize(client->id, client->x, client->y, client->width, client->height);
   } else {
-    PDEBUG("We don't know about this window yet.\n");
 
     /*
      * Unmapped window. Just pass all options except border
@@ -3081,7 +3014,6 @@ events(void) {
      */
     ev = xcb_poll_for_event(conn);
     if (NULL == ev) {
-      PDEBUG("xcb_poll_for_event() returned NULL.\n");
       /*
        * Check if we have an unrecoverable connection error,
        * like a disconnected X server.
@@ -3093,8 +3025,8 @@ events(void) {
 
       int found_poll = poll(fds, 1, -1);
       if (-1 == found_poll) {
-        /* Something was seriously wrong with select(). */
-        fprintf(stderr, "mcwm: poll failed.");
+        /* Something was seriously wrong with poll(). */
+        log_err_final("poll failed");
         cleanup(0);
         exit(1);
       } else {
@@ -3103,17 +3035,9 @@ events(void) {
       }
     }
 
-#ifdef DEBUG
-    if (ev->response_type <= MAXEVENTS) {
-      PDEBUG("Event: %s\n", evnames[ev->response_type]);
-    } else {
-      PDEBUG("Event: #%d. Not known.\n", ev->response_type);
-    }
-#endif
-
     /* Note that we ignore XCB_RANDR_NOTIFY. */
     if (ev->response_type == randrbase + XCB_RANDR_SCREEN_CHANGE_NOTIFY) {
-      PDEBUG("RANDR screen change notify. Checking outputs.\n");
+      log_verbose("RANDR screen change notify. checking outputs");
       getrandr();
       free(ev);
       continue;
@@ -3124,7 +3048,7 @@ events(void) {
         {
           xcb_map_request_event_t *e;
 
-          PDEBUG("event: Map request.\n");
+          log_verbose("event: map request");
           e = (xcb_map_request_event_t *)ev;
           newwin(e->window);
         }
@@ -3167,9 +3091,10 @@ events(void) {
           xcb_button_press_event_t *e;
 
           e = (xcb_button_press_event_t *)ev;
-          PDEBUG("Button %d pressed in window %ld, subwindow %d "
-                 "coordinates (%d,%d)\n",
-                 e->detail, (long)e->event, e->child, e->event_x, e->event_y);
+          log_verbose("button %d pressed in window %ld, subwindow %d "
+                      "coordinates (%d,%d)",
+                      e->detail, (long)e->event, e->child, e->event_x,
+                      e->event_y);
 
           if (0 == e->child) {
             /* Mouse click on root window. Start programs? */
@@ -3270,8 +3195,6 @@ events(void) {
                              screen->root, XCB_NONE, XCB_CURRENT_TIME);
 
             xcb_flush(conn);
-
-            PDEBUG("mode now : %d\n", mode);
           }
         }
         break;
@@ -3297,7 +3220,7 @@ events(void) {
               conn, xcb_query_pointer(conn, screen->root), 0);
 
           if (NULL == pointer) {
-            PDEBUG("Couldn't get pointer position.\n");
+            log_verbose("Couldn't get pointer position");
             break;
           }
 
@@ -3309,17 +3232,13 @@ events(void) {
             mousemove(focuswin, pointer->root_x, pointer->root_y);
           } else if (mode == MCWM_RESIZE) {
             mouseresize(focuswin, pointer->root_x, pointer->root_y);
-          } else {
-            PDEBUG("Motion event when we're not moving our resizing!\n");
           }
-
           free(pointer);
         }
 
         break;
 
       case XCB_BUTTON_RELEASE:
-        PDEBUG("Mouse button released! mode = %d\n", mode);
 
         if (0 == mode) {
           /*
@@ -3338,9 +3257,6 @@ events(void) {
              * We don't seem to have a focused window! Just
              * ungrab and reset the mode.
              */
-            PDEBUG("No focused window when finished moving or "
-                   "resizing!");
-
             xcb_ungrab_pointer(conn, XCB_CURRENT_TIME);
             xcb_flush(conn); /* Important! */
 
@@ -3382,15 +3298,12 @@ events(void) {
           xcb_flush(conn); /* Important! */
 
           mode = 0;
-          PDEBUG("mode now = %d\n", mode);
         }
         break;
 
       case XCB_KEY_PRESS:
         {
           xcb_key_press_event_t *e = (xcb_key_press_event_t *)ev;
-
-          PDEBUG("Key %d pressed\n", e->detail);
 
           handle_keypress(e);
         }
@@ -3401,15 +3314,12 @@ events(void) {
           xcb_key_release_event_t *e = (xcb_key_release_event_t *)ev;
           unsigned i;
 
-          PDEBUG("Key %d released.\n", e->detail);
-
           if (MCWM_TABBING == mode) {
             /*
              * Check if it's the that was released was a key
              * generating the MODKEY mask.
              */
             for (i = 0; i < modkeys.len; i++) {
-              PDEBUG("Is it %d?\n", modkeys.keycodes[i]);
 
               if (e->detail == modkeys.keycodes[i]) {
                 finishtabbing();
@@ -3426,9 +3336,6 @@ events(void) {
         {
           xcb_enter_notify_event_t *e = (xcb_enter_notify_event_t *)ev;
           Client *client;
-
-          PDEBUG("event: Enter notify eventwin %d, child %d, detail %d.\n",
-                 e->event, e->child, e->detail);
 
           /*
            * If this isn't a normal enter notify, don't bother.
@@ -3499,14 +3406,10 @@ events(void) {
              * if the geometry changed. If the geometry is
              * unchanged we do nothing.
              */
-            PDEBUG("Notify event for root!\n");
-            PDEBUG("Possibly a new root geometry: %dx%d\n", e->width,
-                   e->height);
 
             if (e->width == screen->width_in_pixels &&
                 e->height == screen->height_in_pixels) {
               /* Root geometry is really unchanged. Do nothing. */
-              PDEBUG("Hey! Geometry didn't change.\n");
             } else {
               screen->width_in_pixels = e->width;
               screen->height_in_pixels = e->height;
@@ -3621,7 +3524,6 @@ events(void) {
             client = item->data;
 
             if (client->id == e->window) {
-              PDEBUG("Forgetting about %d\n", e->window);
               if (focuswin == client) {
                 focuswin = NULL;
               }
@@ -3724,8 +3626,9 @@ main(int argc, char **argv) {
   unfocuscol = UNFOCUSCOL;
   fixedcol = FIXEDCOL;
 
+  opterr = 0;
   while (1) {
-    ch = getopt(argc, argv, "b:s:it:f:u:x:");
+    ch = getopt(argc, argv, "b:s:it:f:u:x:v");
     if (-1 == ch) {
       /* No more options, break out of while loop. */
       break;
@@ -3762,6 +3665,17 @@ main(int argc, char **argv) {
         fixedcol = optarg;
         break;
 
+      case 'v':
+        verbose = 1;
+        break;
+
+      case '?':
+        if (optopt == 'b' || optopt == 's' || optopt == 'i' || optopt == 't' ||
+            optopt == 'f' || optopt == 'u' || optopt == 'x' || optopt == 'v') {
+          log_err_final("expected argument after -%c", optopt);
+        } else {
+          log_err_final("invalid argument -%c", optopt);
+        }
       default:
         printhelp();
         exit(0);
@@ -3786,15 +3700,12 @@ main(int argc, char **argv) {
 
   screen = iter.data;
   if (!screen) {
-    fprintf(stderr, "mcwm: Can't get the current screen. Exiting.\n");
+    log_err_final("can't get the current screen");
     xcb_disconnect(conn);
     exit(1);
   }
 
   root = screen->root;
-
-  PDEBUG("Screen size: %dx%d\nRoot window: %d\n", screen->width_in_pixels,
-         screen->height_in_pixels, screen->root);
 
   /* Get some colours. */
   conf.focuscol = getcolor(focuscol);
@@ -3813,14 +3724,14 @@ main(int argc, char **argv) {
 
   /* Loop over all clients and set up stuff. */
   if (0 != setupscreen()) {
-    fprintf(stderr, "mcwm: Failed to initialize windows. Exiting.\n");
+    log_err_final("failed to initialize windows");
     xcb_disconnect(conn);
     exit(1);
   }
 
   /* Set up key bindings. */
   if (0 != setupkeys()) {
-    fprintf(stderr, "mcwm: Couldn't set up keycodes. Exiting.");
+    log_err_final("couldn't set up keycodes");
     xcb_disconnect(conn);
     exit(1);
   }
@@ -3855,11 +3766,8 @@ main(int argc, char **argv) {
   xcb_flush(conn);
 
   if (NULL != error) {
-    fprintf(stderr,
-            "mcwm: Can't get SUBSTRUCTURE REDIRECT. "
-            "Error code: %d\n"
-            "Another window manager running? Exiting.\n",
-            error->error_code);
+    log_err_final("failed to initialize window manager, err: %d",
+                  error->error_code);
 
     xcb_disconnect(conn);
 

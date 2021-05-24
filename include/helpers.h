@@ -7,6 +7,8 @@ typedef struct LinkedNode {
   struct LinkedNode *next;
 } LinkedNode;
 
+extern int verbose;
+
 /*
  * Move element in item to the head of list mainlist.
  */
@@ -41,4 +43,7 @@ void list_del_all(LinkedNode **list, int *stored);
  */
 void list_print(LinkedNode *mainlist);
 
+void log_verbose(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+void log_err(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+void log_err_final(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 #endif
